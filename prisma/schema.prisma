@@ -1,0 +1,104 @@
+// Prisma schema — Dompet Digital + Split Bill
+// Default provider: SQLite (mudah dijalankan lokal). Untuk production ganti
+// provider ke "postgresql" dan sesuaikan DATABASE_URL (lihat README.md).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  account                  Account?
+  createdSplitBills        SplitBill[]
+  splitBillParticipations  SplitBillParticipant[]
+}
+
+// Akun pengguna (userId terisi) atau akun sistem (code terisi, mis. "EXTERNAL"
+// untuk merepresentasikan uang yang masuk/keluar dari luar sistem saat top-up).
+// balanceCache SELALU harus sama dengan jumlah (kredit - debit) seluruh
+// LedgerEntry milik akun ini — itu yang diverifikasi job rekonsiliasi.
+model Account {
+  id           String   @id @default(cuid())
+  userId       String?  @unique
+  code         String?  @unique
+  balanceCache Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  user    User?         @relation(fields: [userId], references: [id])
+  entries LedgerEntry[]
+}
+
+// type: "TOPUP" | "TRANSFER" | "SPLIT_SETTLE" — lihat src/lib/constants.ts
+// idempotencyKey unik mencegah request yang dikirim ulang diproses dua kali.
+model LedgerTransaction {
+  id             String   @id @default(cuid())
+  idempotencyKey String   @unique
+  type           String
+  description    String?
+  createdAt      DateTime @default(now())
+
+  entries LedgerEntry[]
+}
+
+// direction: "DEBIT" | "CREDIT" — ledger bersifat append-only (tidak pernah
+// diupdate/dihapus); saldo akun selalu bisa direkonstruksi ulang dari sini.
+model LedgerEntry {
+  id            String   @id @default(cuid())
+  transactionId String
+  accountId     String
+  direction     String
+  amount        Int
+  createdAt     DateTime @default(now())
+
+  transaction LedgerTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  account     Account           @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, createdAt])
+  @@index([transactionId])
+}
+
+model SplitBill {
+  id          String   @id @default(cuid())
+  creatorId   String
+  title       String
+  totalAmount Int
+  createdAt   DateTime @default(now())
+
+  creator      User                    @relation(fields: [creatorId], references: [id])
+  participants SplitBillParticipant[]
+}
+
+model SplitBillParticipant {
+  id                   String   @id @default(cuid())
+  splitBillId          String
+  userId               String
+  shareAmount          Int
+  settled              Boolean  @default(false)
+  settledTransactionId String?
+  createdAt            DateTime @default(now())
+
+  splitBill SplitBill @relation(fields: [splitBillId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@unique([splitBillId, userId])
+}
+
+// Hasil job rekonsiliasi harian — memverifikasi invarian akuntansi.
+model ReconciliationRun {
+  id                 String   @id @default(cuid())
+  runAt              DateTime @default(now())
+  totalDebit         Int
+  totalCredit        Int
+  balanced           Boolean
+  mismatchedAccounts String // JSON: [{ accountId, cached, computed }]
+}
