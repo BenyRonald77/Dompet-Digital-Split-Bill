@@ -33,7 +33,7 @@ export async function createSplitBill(params: {
 
   const totalAmount = params.participants.reduce((sum, p) => sum + p.shareAmount, 0);
 
-  return prisma.splitBill.create({
+  const bill = await prisma.splitBill.create({
     data: {
       creatorId: params.creatorId,
       title: params.title,
@@ -45,8 +45,12 @@ export async function createSplitBill(params: {
         })),
       },
     },
-    include: { participants: { include: { user: true } } },
+    include: {
+      participants: { include: { user: { select: { id: true, name: true, email: true } } } },
+    },
   });
+
+  return bill;
 }
 
 export async function listSplitBillsForUser(userId: string) {
@@ -55,27 +59,34 @@ export async function listSplitBillsForUser(userId: string) {
       OR: [{ creatorId: userId }, { participants: { some: { userId } } }],
     },
     orderBy: { createdAt: "desc" },
-    include: { creator: true, participants: { include: { user: true } } },
+    include: {
+      creator: { select: { name: true } },
+      participants: { include: { user: { select: { id: true, name: true, email: true } } } },
+    },
   });
 
-  return bills.map((bill) => ({
-    id: bill.id,
-    title: bill.title,
-    totalAmount: bill.totalAmount,
-    createdAt: bill.createdAt,
-    creatorName: bill.creator.name,
-    isCreator: bill.creatorId === userId,
-    settledCount: bill.participants.filter((p) => p.settled).length,
-    totalParticipants: bill.participants.length,
-    participants: bill.participants.map((p) => ({
+  return bills.map((bill) => {
+    const participants = bill.participants.map((p) => ({
       id: p.id,
       userId: p.userId,
       name: p.user.name,
       shareAmount: p.shareAmount,
       settled: p.settled,
-    })),
-    myShare: bill.participants.find((p) => p.userId === userId) ?? null,
-  }));
+    }));
+
+    return {
+      id: bill.id,
+      title: bill.title,
+      totalAmount: bill.totalAmount,
+      createdAt: bill.createdAt,
+      creatorName: bill.creator.name,
+      isCreator: bill.creatorId === userId,
+      settledCount: participants.filter((p) => p.settled).length,
+      totalParticipants: participants.length,
+      participants,
+      myShare: participants.find((p) => p.userId === userId) ?? null,
+    };
+  });
 }
 
 export async function settleSplitBillParticipant(params: {

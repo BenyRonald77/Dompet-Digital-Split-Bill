@@ -1,0 +1,19 @@
+name: Daily Ledger Reconciliation
+
+# Memicu job rekonsiliasi harian tanpa perlu proses server yang selalu
+# menyala. Jalan tiap hari pukul 01:00 WIB (18:00 UTC). Sesuaikan APP_URL &
+# CRON_SECRET di repo Settings > Secrets and variables > Actions sebelum
+# mengaktifkan workflow ini.
+on:
+  schedule:
+    - cron: "0 18 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Panggil endpoint reconcile
+        run: |
+          curl -sf -X POST "${{ secrets.APP_URL }}/api/cron/reconcile" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
