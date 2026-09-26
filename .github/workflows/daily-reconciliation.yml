@@ -1,12 +1,13 @@
 name: Daily Ledger Reconciliation
 
 # Memicu job rekonsiliasi harian tanpa perlu proses server yang selalu
-# menyala. Jalan tiap hari pukul 01:00 WIB (18:00 UTC). Sesuaikan APP_URL &
-# CRON_SECRET di repo Settings > Secrets and variables > Actions sebelum
-# mengaktifkan workflow ini.
+# menyala. Sesuaikan APP_URL & CRON_SECRET di repo Settings > Secrets and
+# variables > Actions, lalu aktifkan lagi jadwalnya (uncomment blok
+# `schedule:` di bawah, cron "0 18 * * *" = jam 01:00 WIB) sebelum
+# mengandalkan workflow ini berjalan otomatis.
 on:
-  schedule:
-    - cron: "0 18 * * *"
+  # schedule:
+  #   - cron: "0 18 * * *"
   workflow_dispatch: {}
 
 jobs:
